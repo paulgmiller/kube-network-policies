@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"sigs.k8s.io/kube-network-policies/pkg/networkpolicy"
+	"sigs.k8s.io/kube-network-policies/pkg/nfqinterceptor"
 	npaclient "sigs.k8s.io/network-policy-api/pkg/client/clientset/versioned"
 	npainformers "sigs.k8s.io/network-policy-api/pkg/client/informers/externalversions"
 	"sigs.k8s.io/network-policy-api/pkg/client/informers/externalversions/apis/v1alpha1"
@@ -90,7 +91,8 @@ func run() int {
 
 	nodeName, err := nodeutil.GetHostname(hostnameOverride)
 	if err != nil {
-		klog.Fatalf("can not obtain the node name, use the hostname-override flag if you want to set it to a specific value: %v", err)
+		logger.Error(err, "can not obtain the node name, use the hostname-override flag if you want to set it to a specific value")
+		return 1
 	}
 
 	cfg := networkpolicy.Config{
@@ -104,7 +106,8 @@ func run() int {
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err.Error())
+		logger.Error(err, "could not get cluster config")
+		return 1
 	}
 
 	// use protobuf for better performance at scale
@@ -116,7 +119,8 @@ func run() int {
 	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		panic(err.Error())
+		logger.Error(err, "could not create clientset")
+		return 1
 	}
 
 	informersFactory := informers.NewSharedInformerFactory(clientset, 0)
@@ -128,7 +132,8 @@ func run() int {
 		nodeInformer = informersFactory.Core().V1().Nodes()
 		npaClient, err = npaclient.NewForConfig(npaConfig)
 		if err != nil {
-			klog.Fatalf("Failed to create Network client: %v", err)
+			logger.Error(err, "Failed to create Network client")
+			return 1
 		}
 		npaInformerFactory = npainformers.NewSharedInformerFactory(npaClient, 0)
 	}
@@ -148,6 +153,20 @@ func run() int {
 		utilruntime.HandleError(err)
 	}()
 
+	err = cfg.Defaults()
+	if err != nil {
+		logger.Error(err, "could not default config")
+		return 1
+	}
+
+	//TODO log config?
+
+	interceptor, err := nfqinterceptor.New(cfg)
+	if err != nil {
+		logger.Error(err, "could not start nfq interceptror")
+		return 1
+	}
+
 	networkPolicyController, err := networkpolicy.NewController(
 		clientset,
 		informersFactory.Networking().V1().NetworkPolicies(),
@@ -155,6 +174,7 @@ func run() int {
 		informersFactory.Core().V1().Pods(),
 		nodeInformer,
 		npaClient,
+		interceptor,
 		anpInformer,
 		banpInformer,
 		cfg,
