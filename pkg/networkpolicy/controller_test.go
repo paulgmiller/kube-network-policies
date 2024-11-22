@@ -90,7 +90,7 @@ type networkpolicyController struct {
 
 type mockInterceptor struct{}
 
-func (mockInterceptor) Run(_ context.Context, _ func(Packet) int) (_ error) {
+func (mockInterceptor) Run(_ context.Context, _ func(Packet) Verdict) (_ error) {
 	return nil
 }
 
