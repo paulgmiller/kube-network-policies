@@ -311,14 +311,17 @@ type Controller struct {
 	interceptor interceptor
 }
 
+//go:generate stringer -type=Verdict
+type Verdict int
+
 // Verdicts
 const (
-	Drop = iota
+	Drop Verdict = iota
 	Accept
 )
 
 type interceptor interface {
-	Run(context.Context, func(Packet) int) error
+	Run(context.Context, func(Packet) Verdict) error
 	Sync(ctx context.Context, podV4IPs, podV6IPs sets.Set[string]) error
 	Stop(ctx context.Context)
 }
@@ -357,7 +360,7 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	// Parse the packet and check if it should be accepted
 	// Packets should be evaludated independently in each direction
-	fn := func(packet Packet) int {
+	fn := func(packet Packet) Verdict {
 
 		startTime := time.Now()
 
@@ -367,7 +370,7 @@ func (c *Controller) Run(ctx context.Context) error {
 			processingTime := float64(time.Since(startTime).Microseconds())
 			packetProcessingHist.WithLabelValues(string(packet.proto), string(packet.family)).Observe(processingTime)
 			packetProcessingSum.Observe(processingTime)
-			verdictStr := verdictString(verdict)
+			verdictStr := verdict.String()
 			packetCounterVec.WithLabelValues(string(packet.proto), string(packet.family), verdictStr).Inc()
 			logger.V(2).Info("Finished syncing packet", "id", packet.Id, "duration", time.Since(startTime), "verdict", verdictStr)
 		}()
@@ -389,19 +392,6 @@ func (c *Controller) Run(ctx context.Context) error {
 	<-ctx.Done()
 
 	return nil
-}
-
-// verifctString coverts nfqueue int vericts to strings for metrics/logging
-// it does not cover all of them because we should only use a subset.
-func verdictString(verdict int) string {
-	switch verdict {
-	case Drop:
-		return "drop"
-	case Accept:
-		return "accept"
-	default:
-		return "unknown"
-	}
 }
 
 // evaluatePacket evalute the network policies using the following order:

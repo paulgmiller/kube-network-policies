@@ -76,7 +76,7 @@ func (n *nfqInterceptor) Stop(ctx context.Context) {
 	}
 }
 
-func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpolicy.Packet) int) error {
+func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpolicy.Packet) networkpolicy.Verdict) error {
 	logger := klog.FromContext(ctx)
 	registerMetrics(ctx)
 	go wait.UntilWithContext(ctx, func(ctx context.Context) {
@@ -136,13 +136,13 @@ func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpoli
 		packet, err := networkpolicy.ParsePacket(*a.Payload)
 		if err != nil {
 			logger.Error(err, "Can not process packet, applying default policy", "id", *a.PacketID, "failOpen", n.FailOpen)
-			nf.SetVerdict(packet.Id, verdict)
+			nf.SetVerdict(packet.Id, int(verdict))
 			return 0
 		}
 		packet.Id = *a.PacketID
 		verdict = renderVerdict(packet)
 		// log error and return default if not Accept or Drop?
-		nf.SetVerdict(packet.Id, verdict)
+		nf.SetVerdict(packet.Id, int(verdict))
 		return 0
 	}
 	// Register your function to listen on nflog group 100
