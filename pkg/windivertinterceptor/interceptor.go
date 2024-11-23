@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync/atomic"
 
 	windivert "github.com/sbilly/go-windivert2" //"github.com/paulgmiller/go-windivert2"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -34,7 +35,12 @@ func (wd *windivertinterceptor) Run(ctx context.Context, evaluate func(networkpo
 		packet := make([]byte, 65535)
 		addr := new(windivert.Address)
 		defer handle.Close()
+		var packetid uint32
+
 		for ctx.Err() == nil {
+			atomic.AddUint32(&packetid, 1)
+			//atomic. (&networkpolicy.ActiveInterceptors, 1)
+
 			//consider RecvEx for better perf.
 			recvLen, err := handle.Recv(packet, addr)
 			if err != nil {
@@ -49,10 +55,7 @@ func (wd *windivertinterceptor) Run(ctx context.Context, evaluate func(networkpo
 				log.Println("Error parsing packet:", err)
 				continue
 			}
-
-			// Inspect or modify the packet here
-			// For example, print the packet length
-			log.Printf("Captured packet of length %d bytes\n", recvLen)
+			p.Id = packetid
 
 			//should parallizer this but need to have a pool of packet buffers
 			verdict := evaluate(p)

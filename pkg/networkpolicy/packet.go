@@ -29,6 +29,10 @@ func (p Packet) String() string {
 	return fmt.Sprintf("[%d] %s:%d %s:%d %s\n%s", p.Id, p.srcIP.String(), p.srcPort, p.dstIP.String(), p.dstPort, p.proto, hex.Dump(p.payload))
 }
 
+func (p Packet) ShortString() string {
+	return fmt.Sprintf("[%d] %s:%d %s:%d %s", p.Id, p.srcIP.String(), p.srcPort, p.dstIP.String(), p.dstPort, p.proto)
+}
+
 // This function is used for JSON output (interface logr.Marshaler)
 func (p Packet) MarshalLog() any {
 	return &struct {

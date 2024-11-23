@@ -20,7 +20,7 @@ func main() {
 
 	windivertinterceptor := windivertinterceptor.New()
 	err := windivertinterceptor.Run(ctx, func(p networkpolicy.Packet) networkpolicy.Verdict {
-		log.Println("Packet:", p)
+		log.Println(p.ShortString())
 		return networkpolicy.Accept
 	})
 
