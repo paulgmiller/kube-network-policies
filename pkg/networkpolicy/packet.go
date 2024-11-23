@@ -50,6 +50,15 @@ func (p Packet) MarshalLog() any {
 	}
 }
 
+// forked from syscall sicne they're linux only?
+const (
+	IPPROTO_DSTOPTS  = 0x3c
+	IPPROTO_HOPOPTS  = 0x0
+	IPPROTO_ROUTING  = 0x2b
+	IPPROTO_FRAGMENT = 0x2c
+	IPPROTO_SCTP     = 0x84
+)
+
 // https://en.wikipedia.org/wiki/Internet_Protocol_version_4#Packet_structure
 // https://en.wikipedia.org/wiki/IPv6_packet
 // https://github.com/golang/net/blob/master/ipv4/header.go
@@ -95,7 +104,7 @@ func ParsePacket(b []byte) (Packet, error) {
 		// Handle extension headers.
 		nxtHeader = int(b[6])
 		l4offset = 40
-		for nxtHeader == syscall.IPPROTO_DSTOPTS || nxtHeader == syscall.IPPROTO_HOPOPTS || nxtHeader == syscall.IPPROTO_ROUTING {
+		for nxtHeader == IPPROTO_DSTOPTS || nxtHeader == IPPROTO_HOPOPTS || nxtHeader == IPPROTO_ROUTING {
 			// These headers have a lenght in 8-octet units, not
 			// including the first 8 octets
 			nxtHeader = int(b[l4offset])
@@ -107,7 +116,7 @@ func ParsePacket(b []byte) (Packet, error) {
 				return t, ErrorTooShort
 			}
 		}
-		if nxtHeader == syscall.IPPROTO_FRAGMENT {
+		if nxtHeader == IPPROTO_FRAGMENT {
 			// Only the first fragment has the L4 header
 			fragOffset := int(binary.BigEndian.Uint16(b[l4offset+2 : l4offset+4]))
 			if fragOffset&0xfff8 == 0 {
@@ -145,7 +154,7 @@ func ParsePacket(b []byte) (Packet, error) {
 	case syscall.IPPROTO_UDP:
 		t.proto = v1.ProtocolUDP
 		payloadOffset = l4offset + 8
-	case syscall.IPPROTO_SCTP:
+	case IPPROTO_SCTP:
 		t.proto = v1.ProtocolSCTP
 		payloadOffset = l4offset + 8
 	default:
