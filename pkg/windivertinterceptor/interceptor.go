@@ -1,5 +1,14 @@
 //go:build windows
 
+// Windivert https://reqrypt.org/windivert is a nice helper over top of windows filter platform but it has a couple of issues
+//  1. It may be abandoned.
+//  2. it downloads a driver  and dll from github which is really convenient but radically insecure.
+//  3. Lacks ability to do the following
+//     a) copy just packet headers
+//     b) filter only on first packet of a udp flow. (
+//     c) reload a handle when we get a new ip to filter (could we just create a handle for every pod ip then close them when they go away or we shut down?)
+//
+// If this is actually valuable we could probably for it or just create our own packet capture c library.
 package windivertinterceptor
 
 import (
