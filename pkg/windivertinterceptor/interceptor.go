@@ -22,8 +22,8 @@ import (
 	"sigs.k8s.io/kube-network-policies/pkg/networkpolicy"
 )
 
-func New() windivertinterceptor {
-	return windivertinterceptor{}
+func New() *windivertinterceptor {
+	return &windivertinterceptor{}
 }
 
 type windivertinterceptor struct {
