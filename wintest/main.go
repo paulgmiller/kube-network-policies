@@ -17,9 +17,9 @@ func main() {
 	ctx, cancel := signal.NotifyContext(
 		context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
-
+	log.Println("Started")
 	windivertinterceptor := windivertinterceptor.New()
-	err := windivertinterceptor.Run(ctx, func(p networkpolicy.Packet) networkpolicy.Verdict {
+	err := windivertinterceptor.Run(ctx, func(_ context.Context, p networkpolicy.Packet) networkpolicy.Verdict {
 		log.Println(p.ShortString())
 		return networkpolicy.Accept
 	})
@@ -27,7 +27,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to run windivertinterceptor: %v", err)
 	}
-
-	<-ctx.Done()
+	log.Printf("Exiting")
 
 }
