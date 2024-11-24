@@ -321,9 +321,7 @@ const (
 )
 
 type interceptor interface {
-	Run(context.Context, func(Packet) Verdict) error
 	Sync(ctx context.Context, podV4IPs, podV6IPs sets.Set[string]) error
-	Stop(ctx context.Context)
 }
 
 // Run will not return until stopCh is closed. workers determines how many
@@ -358,40 +356,34 @@ func (c *Controller) Run(ctx context.Context) error {
 	// Start the workers after the repair loop to avoid races
 	go wait.Until(c.runWorker, time.Second, ctx.Done())
 
-	// Parse the packet and check if it should be accepted
-	// Packets should be evaludated independently in each direction
-	fn := func(packet Packet) Verdict {
-
-		startTime := time.Now()
-
-		logger.V(2).Info("Processing sync for packet", "id", packet.Id)
-		verdict := Accept
-		defer func() {
-			processingTime := float64(time.Since(startTime).Microseconds())
-			packetProcessingHist.WithLabelValues(string(packet.proto), string(packet.family)).Observe(processingTime)
-			packetProcessingSum.Observe(processingTime)
-			verdictStr := verdict.String()
-			packetCounterVec.WithLabelValues(string(packet.proto), string(packet.family), verdictStr).Inc()
-			logger.V(2).Info("Finished syncing packet", "id", packet.Id, "duration", time.Since(startTime), "verdict", verdictStr)
-		}()
-
-		if c.evaluatePacket(ctx, packet) {
-			verdict = Accept
-		} else {
-			verdict = Drop
-		}
-		return verdict
-	}
-
-	err := c.interceptor.Run(ctx, fn)
-	if err != nil {
-		return err
-	}
-	defer c.interceptor.Stop(ctx)
-
-	<-ctx.Done()
-
 	return nil
+}
+
+// Parse the packet and check if it should be accepted
+// Packets should be evaludated independently in each direction
+
+func (c *Controller) EvaluatePacket(ctx context.Context, packet Packet) Verdict {
+
+	startTime := time.Now()
+	logger := klog.FromContext(ctx)
+
+	logger.V(2).Info("Processing sync for packet", "id", packet.Id)
+	verdict := Accept
+	defer func() {
+		processingTime := float64(time.Since(startTime).Microseconds())
+		packetProcessingHist.WithLabelValues(string(packet.proto), string(packet.family)).Observe(processingTime)
+		packetProcessingSum.Observe(processingTime)
+		verdictStr := verdict.String()
+		packetCounterVec.WithLabelValues(string(packet.proto), string(packet.family), verdictStr).Inc()
+		logger.V(2).Info("Finished syncing packet", "id", packet.Id, "duration", time.Since(startTime), "verdict", verdictStr)
+	}()
+
+	if c.evaluatePacket(ctx, packet) {
+		verdict = Accept
+	} else {
+		verdict = Drop
+	}
+	return verdict
 }
 
 // evaluatePacket evalute the network policies using the following order:

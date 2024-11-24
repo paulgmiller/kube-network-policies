@@ -64,19 +64,9 @@ type nfqInterceptor struct {
 	queueid             int
 	NetfilterBug1766Fix bool
 	interceptAll        bool //!c.config.AdminNetworkPolicy && !c.config.BaselineAdminNetworkPolicy
-
-	//populated late and saved for close
-	nf *nfqueue.Nfqueue
 }
 
-func (n *nfqInterceptor) Stop(ctx context.Context) {
-	n.cleanNFTablesRules(ctx)
-	if n.nf != nil {
-		n.nf.Close()
-	}
-}
-
-func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpolicy.Packet) networkpolicy.Verdict) error {
+func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(context.Context, networkpolicy.Packet) networkpolicy.Verdict) error {
 	logger := klog.FromContext(ctx)
 	registerMetrics(ctx)
 	go wait.UntilWithContext(ctx, func(ctx context.Context) {
@@ -124,6 +114,11 @@ func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpoli
 		return err
 	}
 
+	defer func() {
+		n.cleanNFTablesRules(ctx)
+		nf.Close()
+	}()
+
 	logger.Info("Syncing nftables rules")
 	_ = n.Sync(ctx, sets.Set[string]{}, sets.Set[string]{}) //why bother with empties?
 
@@ -140,7 +135,7 @@ func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpoli
 			return 0
 		}
 		packet.Id = *a.PacketID
-		verdict = renderVerdict(packet)
+		verdict = renderVerdict(ctx, packet)
 		// log error and return default if not Accept or Drop?
 		nf.SetVerdict(packet.Id, int(verdict))
 		return 0
@@ -159,6 +154,9 @@ func (n *nfqInterceptor) Run(ctx context.Context, renderVerdict func(networkpoli
 		logger.Info("could not open nfqueue socket", "error", err)
 		return err
 	}
+
+	//wait here or we'll cleanup nftable rukes and close the socket
+	<-ctx.Done()
 
 	return nil
 }

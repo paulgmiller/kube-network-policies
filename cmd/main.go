@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"sigs.k8s.io/kube-network-policies/pkg/networkpolicy"
@@ -18,6 +17,7 @@ import (
 	"sigs.k8s.io/network-policy-api/pkg/client/informers/externalversions/apis/v1alpha1"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	v1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -54,6 +54,12 @@ func init() {
 		fmt.Fprint(os.Stderr, "Usage: kube-network-policies [options]\n\n")
 		flag.PrintDefaults()
 	}
+}
+
+type interceptor interface {
+	// Run should block until context is done and then clean up its resources.
+	Run(context.Context, func(networkpolicy.Packet) networkpolicy.Verdict) error
+	Sync(ctx context.Context, podV4IPs, podV6IPs sets.Set[string]) error
 }
 
 // This is a pattern to ensure that deferred functions executes before os.Exit
@@ -183,19 +189,19 @@ func run() int {
 		logger.Error(err, "Can not start network policy controller")
 		return 1
 	}
-	go func() {
-		err := networkPolicyController.Run(ctx)
-		utilruntime.HandleError(err)
-	}()
+	err = networkPolicyController.Run(ctx)
+	if err != nil {
+		logger.Error(err, "Can not start network policy controller")
+		return 1
+	}
 
 	informersFactory.Start(ctx.Done())
 	if adminNetworkPolicy || baselineAdminNetworkPolicy {
 		npaInformerFactory.Start(ctx.Done())
 	}
 
-	<-ctx.Done()
+	//should block till its resources are cleane up.
+	interceptor.Run(ctx, networkPolicyController.EvaluatePacket)
 
-	// grace period to cleanup resources
-	time.Sleep(5 * time.Second)
 	return 0
 }
