@@ -11,12 +11,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"sigs.k8s.io/kube-network-policies/pkg/networkpolicy"
-	"sigs.k8s.io/kube-network-policies/pkg/nfqinterceptor"
 	npaclient "sigs.k8s.io/network-policy-api/pkg/client/clientset/versioned"
 	npainformers "sigs.k8s.io/network-policy-api/pkg/client/informers/externalversions"
 	"sigs.k8s.io/network-policy-api/pkg/client/informers/externalversions/apis/v1alpha1"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	v1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -26,8 +26,6 @@ import (
 	_ "k8s.io/component-base/logs/json/register"
 	nodeutil "k8s.io/component-helpers/node/util"
 	"k8s.io/klog/v2"
-
-	"golang.org/x/sys/unix"
 )
 
 var (
@@ -55,6 +53,12 @@ func init() {
 	}
 }
 
+type interceptor interface {
+	// Run should block until context is done and then clean up its resources.
+	Run(context.Context, func(context.Context, networkpolicy.Packet) networkpolicy.Verdict) error
+	Sync(ctx context.Context, podV4IPs, podV6IPs sets.Set[string]) error
+}
+
 // This is a pattern to ensure that deferred functions executes before os.Exit
 func main() {
 	os.Exit(run())
@@ -73,7 +77,7 @@ func run() int {
 
 	// Create a context for structured logging, and catch termination signals
 	ctx, cancel := signal.NotifyContext(
-		context.Background(), os.Interrupt, unix.SIGINT)
+		context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
 	logger := klog.FromContext(ctx)
@@ -155,10 +159,9 @@ func run() int {
 	}
 
 	//TODO log config?
-
-	interceptor, err := nfqinterceptor.New(cfg)
+	interceptor, err := getInterceptor(cfg)
 	if err != nil {
-		logger.Error(err, "could not start nfq interceptror")
+		logger.Error(err, "could not interceptor")
 		return 1
 	}
 
